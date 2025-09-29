@@ -29,6 +29,7 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
   const [imageLoaded, setImageLoaded] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerDimensions, setContainerDimensions] = useState({ width: 0, height: 0 })
+  const [viewportHeight, setViewportHeight] = useState(600)
 
   // Fetch currently reading books
   useEffect(() => {
@@ -63,14 +64,26 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
     }
 
     updateDimensions()
-    // Update again after image loads to ensure proper dimensions
-    if (imageLoaded) {
-      updateDimensions()
-    }
-
     window.addEventListener('resize', updateDimensions)
     return () => window.removeEventListener('resize', updateDimensions)
   }, [imageLoaded])
+
+  // Track viewport height and container dimensions
+  useEffect(() => {
+    const handleResize = () => {
+      setViewportHeight(window.innerHeight)
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect()
+        setContainerDimensions({ width: rect.width, height: rect.height })
+      }
+    }
+
+    // Set initial viewport height
+    setViewportHeight(window.innerHeight)
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   // Force image loading after timeout to prevent books from being stuck
   useEffect(() => {
@@ -83,48 +96,8 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
     return () => clearTimeout(timeout)
   }, [imageLoaded])
 
-  // Calculate the actual visible image dimensions
-  const getImageDimensions = () => {
-    if (!containerDimensions.width || !containerDimensions.height) {
-      return { width: 0, height: 0 }
-    }
 
-    const originalAspectRatio = 800 / 600
-
-    if (fullPage) {
-      const containerAspectRatio = containerDimensions.width / containerDimensions.height
-
-      if (containerAspectRatio > originalAspectRatio) {
-        // Container is wider - image will be height-constrained
-        const imageHeight = containerDimensions.height
-        const imageWidth = imageHeight * originalAspectRatio
-        return { width: imageWidth, height: imageHeight }
-      } else {
-        // Container is narrower - check if we should crop or scale
-        const naturalWidth = containerDimensions.height * originalAspectRatio
-        const cropPercentage = containerDimensions.width / naturalWidth
-
-        if (cropPercentage < 0.4) {
-          // Below 40% visibility - scale to fit width
-          const imageWidth = containerDimensions.width
-          const imageHeight = imageWidth / originalAspectRatio
-          return { width: imageWidth, height: imageHeight }
-        } else {
-          // Crop the sides - image fills height
-          const imageHeight = containerDimensions.height
-          const imageWidth = imageHeight * originalAspectRatio
-          return { width: imageWidth, height: imageHeight }
-        }
-      }
-    } else {
-      // Non-full page mode - image fills width
-      const imageWidth = containerDimensions.width
-      const imageHeight = imageWidth / originalAspectRatio
-      return { width: imageWidth, height: imageHeight }
-    }
-  }
-
-  // Calculate book positions on the bookstand - image-relative positioning
+  // Simple book positioning
   const calculateBookPositions = (): Array<{
     book: Book;
     x: number;
@@ -132,11 +105,7 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
     width: number;
     height: number;
   }> => {
-    if (!containerDimensions.width || !containerDimensions.height) {
-      return []
-    }
-    
-    if (currentlyReading.length === 0) {
+    if (!containerDimensions.width || !containerDimensions.height || currentlyReading.length === 0) {
       return []
     }
 
@@ -148,57 +117,29 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
       height: number;
     }> = []
 
-    // Get the actual rendered image dimensions
-    const imageDims = getImageDimensions()
-    if (!imageDims.width || !imageDims.height) {
-      return []
-    }
+    const bookAspectRatio = 0.65
+    const bookHeight = 80
+    const bookWidth = bookHeight * bookAspectRatio
 
-    const bookAspectRatio = 0.65 // typical book cover ratio
-    const baseBookHeight = 140 // Fixed height relative to original image
-    const bookWidth = baseBookHeight * bookAspectRatio
-
-    // Scale books proportionally with the actual rendered image
-    const scale = imageDims.width / 800 // 800 is the original image width
-    const scaledBookHeight = baseBookHeight * scale
-    const scaledBookWidth = bookWidth * scale
-
-    // Fixed positions for books relative to the original image (800x600)
+    // Simple percentage-based positioning
     const bookPositions = [
-      { x: 420, y: 413 },   // Middle position (52% of 800, 57% of 600)
-      { x: 248, y: 406 },   // Left position (35.4% of 800, 55% of 600)  
-      { x: 520, y: 342 },   // Right position (65% of 800, 57% of 600)
+      { x: 50, y: 60 },   // Center
+      { x: 30, y: 65 },   // Left  
+      { x: 70, y: 55 },   // Right
     ]
 
-    // Calculate image offset within container
-    let imageOffsetX = 0
-    let imageOffsetY = 0
-
-    if (fullPage) {
-      // Calculate centering offsets
-      imageOffsetX = (containerDimensions.width - imageDims.width) / 2
-      imageOffsetY = (containerDimensions.height - imageDims.height) / 2
-    }
-
-    // Position each book
     currentlyReading.forEach((book, index) => {
       if (index < bookPositions.length) {
         const position = bookPositions[index]
-        
-        // Scale the position from original image coordinates
-        const scaledX = position.x * scale
-        const scaledY = position.y * scale
-        
-        // Calculate absolute pixel positions
-        const x = imageOffsetX + scaledX - (scaledBookWidth / 2)
-        const y = imageOffsetY + scaledY - (scaledBookHeight / 2)
+        const x = (containerDimensions.width * position.x / 100) - (bookWidth / 2)
+        const y = (containerDimensions.height * position.y / 100) - (bookHeight / 2)
 
         positions.push({
           book,
-          x: Math.max(0, x), // Ensure positive coordinates
+          x: Math.max(0, x),
           y: Math.max(0, y),
-          width: scaledBookWidth,
-          height: scaledBookHeight,
+          width: bookWidth,
+          height: bookHeight,
         })
       }
     })
@@ -214,55 +155,25 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
     return book.large_image_url || book.medium_image_url || book.image_url || book.small_image_url || '/default-book-cover.png'
   }
 
-  // Calculate image style based on viewport
+  // Fixed height image style that maintains aspect ratio
   const getImageStyle = () => {
-    if (!fullPage || !containerDimensions.width) return {}
+    // Original image is 2850x1628, aspect ratio = 2850/1628 ≈ 1.75
+    const aspectRatio = 2850 / 1628
+    const calculatedWidth = viewportHeight * aspectRatio
 
-    const viewportWidth = containerDimensions.width
-    const imageAspectRatio = 800 / 600 // Original image aspect ratio
-    const viewportHeight = containerDimensions.height
-
-    // Calculate the natural width the image would have at full viewport height
-    const naturalImageWidth = viewportHeight * imageAspectRatio
-
-    // If viewport is narrower than the natural image width
-    if (viewportWidth < naturalImageWidth) {
-      // Calculate how much we're cropping (as a percentage of the full image)
-      const cropPercentage = viewportWidth / naturalImageWidth
-
-      // If we're showing less than 40% of the image, start shrinking instead
-      if (cropPercentage < 0.4) {
-        // Scale down to fit width while maintaining aspect ratio
-        return {
-          width: '100%',
-          height: 'auto',
-          objectFit: 'contain' as const,
-          objectPosition: 'center'
-        }
-      } else {
-        // Crop the sides (show only center portion)
-        return {
-          width: 'auto',
-          height: '100%',
-          objectFit: 'cover' as const,
-          objectPosition: 'center'
-        }
-      }
-    }
-
-    // If viewport is wider, just fit to height
     return {
-      width: 'auto',
-      height: '100%',
+      width: `${calculatedWidth}px`,
+      height: `${viewportHeight}px`,
+      flexShrink: 0,
       objectFit: 'cover' as const,
-      objectPosition: 'center'
     }
   }
+
 
   if (!username) {
     return (
       <div className={`relative ${fullPage ? 'fixed inset-0' : ''} ${className}`}>
-        <div ref={containerRef} className={fullPage ? 'relative w-full h-full overflow-hidden flex items-center justify-center' : 'relative w-full h-auto'}>
+        <div ref={containerRef} className={fullPage ? 'relative w-full h-full flex items-center justify-center overflow-hidden' : 'relative w-full h-auto flex justify-center overflow-hidden'}>
           <img
             src="/background_upscaled.jpg"
             alt="Cozy Bookshelf"
@@ -277,7 +188,7 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
 
   return (
     <div className={`relative ${fullPage ? 'fixed inset-0' : ''} ${className}`}>
-      <div ref={containerRef} className={fullPage ? 'relative w-full h-full overflow-hidden flex items-center justify-center' : 'relative w-full h-auto'}>
+      <div ref={containerRef} className={fullPage ? 'relative w-full h-full bg-black flex items-center justify-center overflow-hidden' : 'relative w-full h-auto flex justify-center overflow-hidden'}>
         {/* Background bookshelf image */}
         <img
           src="/background_upscaled.jpg"
