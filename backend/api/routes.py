@@ -74,6 +74,23 @@ async def get_currently_reading_books(username: str):
         logger.error(f"Error fetching currently reading books: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/user/{username}/read")
+async def get_read_books(username: str):
+    try:
+        from services.database import database_service
+        books = database_service.get_read_books(username)
+
+        return {
+            "success": True,
+            "username": username,
+            "read_books": books,
+            "count": len(books)
+        }
+
+    except Exception as e:
+        logger.error(f"Error fetching read books: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "goodreads-scraper-api"}

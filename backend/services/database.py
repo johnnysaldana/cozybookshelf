@@ -142,6 +142,26 @@ class DatabaseService:
             logger.error(f"Error fetching currently reading books: {e}")
             raise
 
+    def get_read_books(self, username: str):
+        try:
+            if self.supabase:
+                # First get the user
+                user_response = self.supabase.table('goodreads_users').select('id').eq('username', username).execute()
+                if not user_response.data:
+                    return []
+
+                user_id = user_response.data[0]['id']
+
+                # Get read books
+                response = self.supabase.table('user_books').select("*, books(*)").eq('user_id', user_id).eq('status', 'read').execute()
+                return response.data
+            else:
+                logger.warning("Supabase client not configured")
+                return []
+        except Exception as e:
+            logger.error(f"Error fetching read books: {e}")
+            raise
+
     def get_book_by_goodreads_id(self, goodreads_id: str):
         try:
             if self.supabase:

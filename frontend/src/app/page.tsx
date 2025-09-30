@@ -101,8 +101,7 @@ export default function Home() {
         <div className="flex justify-between items-center">
           <div className="text-white flex items-center gap-3">
             <div>
-              <h1 className="text-3xl font-bold drop-shadow-lg">Cozy Bookshelf</h1>
-              <p className="text-sm opacity-90">Currently viewing: {selectedUsername}</p>
+              <h1 className="text-3xl font-bold drop-shadow-lg">WhatIsJohnnyReading.com</h1>
             </div>
             <button
               onClick={handleRefresh}
@@ -127,7 +126,7 @@ export default function Home() {
           </div>
           <button
             onClick={() => setShowImport(true)}
-            className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors shadow-lg"
+            className="px-6 py-2 bg-gradient-to-r from-yellow-400 to-yellow-600 text-white rounded-lg hover:from-yellow-500 hover:to-yellow-700 transition-all shadow-lg"
           >
             Import Profile
           </button>
