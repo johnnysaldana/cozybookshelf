@@ -4,6 +4,7 @@ import { useState } from 'react'
 import axios from 'axios'
 import BookshelfDisplay from '@/components/BookshelfDisplay'
 import { useBookData } from '@/context/BookDataContext'
+import { apiGet, apiPost } from '@/lib/api'
 
 export default function Home() {
   const { userData, refreshUserData } = useBookData()
@@ -27,16 +28,17 @@ export default function Home() {
     setResult(null)
 
     try {
-      const response = await axios.post('/api/v1/scrape', {
+      const response = await apiPost('/api/v1/scrape', {
         profile_url: profileUrl,
         full_scrape: true
       })
+      const responseData = await response.json()
 
-      setResult(response.data)
+      setResult(responseData)
       // Auto-set the username after successful scrape
-      if (response.data.username) {
-        setSelectedUsername(response.data.username)
-        setUsernameInput(response.data.username)
+      if (responseData.username) {
+        setSelectedUsername(responseData.username)
+        setUsernameInput(responseData.username)
       }
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to scrape profile')
@@ -65,7 +67,7 @@ export default function Home() {
 
       if (!profileUrlToUse) {
         // Fallback to fetching if not in cache
-        const userResponse = await fetch(`/api/v1/user/${selectedUsername}`)
+        const userResponse = await apiGet(`/api/v1/user/${selectedUsername}`)
         if (!userResponse.ok) {
           throw new Error('User not found')
         }
@@ -78,12 +80,13 @@ export default function Home() {
       }
 
       // Rescrape using the original profile URL
-      const response = await axios.post('/api/v1/scrape', {
+      const response = await apiPost('/api/v1/scrape', {
         profile_url: profileUrlToUse,
         full_scrape: true
       })
+      const responseData = await response.json()
 
-      if (response.data.success) {
+      if (responseData.success) {
         // Refresh the cached data
         await refreshUserData()
       }

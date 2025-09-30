@@ -1,6 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { apiGet } from '@/lib/api'
 
 interface Book {
   id: string
@@ -69,7 +70,7 @@ export function BookDataProvider({ children }: { children: ReactNode }) {
 
     try {
       // Fetch all user data in one call
-      const response = await fetch(`/api/v1/user/${username}`)
+      const response = await apiGet(`/api/v1/user/${username}`)
       if (!response.ok) {
         throw new Error('Failed to fetch user data')
       }

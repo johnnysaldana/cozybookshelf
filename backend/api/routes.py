@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from pydantic import BaseModel, HttpUrl
 from typing import Optional, Dict
 from services.scraping_service import scraping_service
+from middleware.auth import verify_api_key
 import logging
 
 logger = logging.getLogger(__name__)
@@ -21,7 +22,11 @@ class ScrapeResponse(BaseModel):
     error: Optional[str] = None
 
 @router.post("/scrape", response_model=ScrapeResponse)
-async def scrape_goodreads_profile(request: ScrapeRequest, background_tasks: BackgroundTasks):
+async def scrape_goodreads_profile(
+    request: ScrapeRequest,
+    background_tasks: BackgroundTasks,
+    api_key: str = Depends(verify_api_key)
+):
     try:
         profile_url = str(request.profile_url)
 
@@ -42,7 +47,10 @@ async def scrape_goodreads_profile(request: ScrapeRequest, background_tasks: Bac
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/user/{username}")
-async def get_user_data(username: str):
+async def get_user_data(
+    username: str,
+    api_key: str = Depends(verify_api_key)
+):
     try:
         result = scraping_service.get_user_library(username)
 
@@ -58,7 +66,10 @@ async def get_user_data(username: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/user/{username}/currently-reading")
-async def get_currently_reading_books(username: str):
+async def get_currently_reading_books(
+    username: str,
+    api_key: str = Depends(verify_api_key)
+):
     try:
         from services.database import database_service
         books = database_service.get_currently_reading_books(username)
@@ -75,7 +86,10 @@ async def get_currently_reading_books(username: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/user/{username}/read")
-async def get_read_books(username: str):
+async def get_read_books(
+    username: str,
+    api_key: str = Depends(verify_api_key)
+):
     try:
         from services.database import database_service
         books = database_service.get_read_books(username)
