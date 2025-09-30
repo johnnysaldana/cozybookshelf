@@ -329,17 +329,17 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
     if (viewportAspectRatio > 1) {
       // Horizontal mode shelf positions
       shelfPositions = [
-        { y: 51.5, startX: 42, endX: 85 }, // Top visible shelf
-        { y: 65, startX: 15, endX: 85 }, // Middle shelf
-        { y: 85, startX: 15, endX: 85 }, // Bottom shelf
+        { y: 51.5, startX: 40, endX: 85 }, // Top visible shelf
+        { y: 65, startX: 40, endX: 85 }, // Middle shelf
+        { y: 85, startX: 40, endX: 85 }, // Bottom shelf
       ]
     } else {
       // Vertical mode shelf positions (adjust for full image visibility)
       shelfPositions = [
-        { y: 51, startX: 44, endX: 85 }, // Top shelf
-        { y: 50, startX: 15, endX: 85 }, // Middle-top shelf
-        { y: 65, startX: 15, endX: 85 }, // Middle-bottom shelf
-        { y: 80, startX: 15, endX: 85 }, // Bottom shelf
+        { y: 51, startX: 42.5, endX: 85 }, // Top shelf
+        { y: 50, startX: 42.5, endX: 85 }, // Middle-top shelf
+        { y: 65, startX: 42.5, endX: 85 }, // Middle-bottom shelf
+        { y: 80, startX: 42.5, endX: 85 }, // Bottom shelf
       ]
     }
 
