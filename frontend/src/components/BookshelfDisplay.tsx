@@ -54,7 +54,7 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
     const fetchCurrentlyReading = async () => {
       setLoading(true)
       try {
-        const response = await fetch(`http://localhost:8000/api/v1/user/${username}/currently-reading`)
+        const response = await fetch(`http://localhost:8000/api/v1/user/${username}/currently-reading?_=${Date.now()}`)
         if (!response.ok) throw new Error('Failed to fetch currently reading books')
 
         const data = await response.json()
@@ -76,7 +76,7 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
 
     const fetchReadBooks = async () => {
       try {
-        const response = await fetch(`http://localhost:8000/api/v1/user/${username}/read`)
+        const response = await fetch(`http://localhost:8000/api/v1/user/${username}/read?_=${Date.now()}`)
         if (!response.ok) throw new Error('Failed to fetch read books')
 
         const data = await response.json()

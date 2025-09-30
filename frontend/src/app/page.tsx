@@ -78,8 +78,9 @@ export default function Home() {
 
       if (response.data.success) {
         // Force a refresh of the bookshelf display by triggering a re-render
+        const currentUsername = selectedUsername
         setSelectedUsername('')
-        setTimeout(() => setSelectedUsername('johnny-saldana'), 100)
+        setTimeout(() => setSelectedUsername(currentUsername), 100)
       }
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || 'Failed to refresh profile data')

@@ -81,7 +81,7 @@ class GoodreadsRSSScraper:
             }
 
     def scrape_books_via_rss(
-        self, user_id: str, shelf: Optional[str] = None, per_page: int = 200
+        self, user_id: str, shelf: Optional[str] = None, per_page: int = 1000
     ) -> Dict:
         """
         Scrape books using Goodreads RSS feed and return both raw RSS and parsed data.
