@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
+import { useBookData } from '@/context/BookDataContext'
 
 interface Book {
   id: string
@@ -36,59 +37,26 @@ interface BookshelfDisplayProps {
 }
 
 export default function BookshelfDisplay({ username, className = '', fullPage = false }: BookshelfDisplayProps & { fullPage?: boolean }) {
-  const [currentlyReading, setCurrentlyReading] = useState<Book[]>([])
-  const [readBooks, setReadBooks] = useState<Book[]>([])
-  const [loading, setLoading] = useState(false)
+  const { userData, loading: contextLoading, loadUserData } = useBookData()
   const [imageLoaded, setImageLoaded] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerDimensions, setContainerDimensions] = useState({ width: 0, height: 0 })
   const [viewportHeight, setViewportHeight] = useState(600)
   const [viewportWidth, setViewportWidth] = useState(1200)
   const [selectedBook, setSelectedBook] = useState<Book | null>(null)
-  const [bookModalLoading, setBookModalLoading] = useState(false)
+  const [synopsisExpanded, setSynopsisExpanded] = useState(false)
 
-  // Fetch currently reading books
+  // Load user data when username changes
   useEffect(() => {
-    if (!username) return
-
-    const fetchCurrentlyReading = async () => {
-      setLoading(true)
-      try {
-        const response = await fetch(`/api/v1/user/${username}/currently-reading?_=${Date.now()}`)
-        if (!response.ok) throw new Error('Failed to fetch currently reading books')
-
-        const data = await response.json()
-        setCurrentlyReading(data.currently_reading || [])
-      } catch (error) {
-        console.error('Error fetching currently reading books:', error)
-        setCurrentlyReading([])
-      } finally {
-        setLoading(false)
-      }
+    if (username) {
+      loadUserData(username)
     }
+  }, [username, loadUserData])
 
-    fetchCurrentlyReading()
-  }, [username])
-
-  // Fetch read books for spine display
-  useEffect(() => {
-    if (!username) return
-
-    const fetchReadBooks = async () => {
-      try {
-        const response = await fetch(`/api/v1/user/${username}/read?_=${Date.now()}`)
-        if (!response.ok) throw new Error('Failed to fetch read books')
-
-        const data = await response.json()
-        setReadBooks(data.read_books || [])
-      } catch (error) {
-        console.error('Error fetching read books:', error)
-        setReadBooks([])
-      }
-    }
-
-    fetchReadBooks()
-  }, [username])
+  // Get current books from context
+  const currentlyReading = userData?.currently_reading || []
+  const readBooks = userData?.read_books || []
+  const loading = contextLoading
 
   // Update container dimensions when image loads or window resizes
   useEffect(() => {
@@ -135,35 +103,37 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
   }, [imageLoaded])
 
   // Handle book click to show detailed modal
-  const handleBookClick = async (book: Book) => {
-    setBookModalLoading(true)
-    try {
-      // Fetch full user data to get all book details
-      const response = await fetch(`/api/v1/user/${username}`)
-      if (!response.ok) throw new Error('Failed to fetch user data')
+  const handleBookClick = (book: Book) => {
+    setSynopsisExpanded(false) // Reset synopsis state for new book
 
-      const userData = await response.json()
+    // Find the specific book with all details from cached data
+    const detailedBook = userData?.books?.find((b: Book) => b.id === book.id)
 
-      // Find the specific book with all details
-      const detailedBook = userData.books?.find((b: Book) => b.id === book.id)
-
-      if (detailedBook) {
-        setSelectedBook(detailedBook)
-      } else {
-        setSelectedBook(book) // Fallback to current book data
-      }
-    } catch (error) {
-      console.error('Error fetching book details:', error)
+    if (detailedBook) {
+      setSelectedBook(detailedBook)
+    } else {
       setSelectedBook(book) // Fallback to current book data
-    } finally {
-      setBookModalLoading(false)
     }
   }
 
   // Close modal
   const closeModal = () => {
     setSelectedBook(null)
+    setSynopsisExpanded(false)
   }
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    if (selectedBook) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [selectedBook])
 
   // Simple book positioning
   const calculateBookPositions = (): Array<{
@@ -401,10 +371,9 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
     }))
 
     let currentShelfIndex = 0
-    let currentXPosition = shelfPositions[0].startX
-    const fixedSpacingPixels = 2 // Fixed 2 pixel spacing between books
+    let currentXPosition = shelfPositions[0].startX // This tracks the LEFT edge of the next spine
 
-    // Track books per shelf to avoid adding spacing after last book
+    // Track books per shelf
     let booksOnCurrentShelf = 0
 
     bookSpineDimensions.forEach((bookData, index) => {
@@ -416,12 +385,11 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
       // Calculate reference width for percentage conversions
       const imageReferenceWidth = viewportAspectRatio > 1 ? (viewportHeight * aspectRatio) : imageWidth
       const spineWidthPercentage = (spineWidth / imageReferenceWidth) * 100
-      const spacingPercentage = (fixedSpacingPixels / imageReferenceWidth) * 100
 
-      // Check if current book fits on current shelf
-      const nextXPosition = currentXPosition + spineWidthPercentage
+      // Check if current book fits on current shelf (left edge + width <= shelf end)
+      const spineRightEdge = currentXPosition + spineWidthPercentage
 
-      if (nextXPosition > currentShelf.endX && booksOnCurrentShelf > 0) {
+      if (spineRightEdge > currentShelf.endX && booksOnCurrentShelf > 0) {
         // Move to next shelf
         currentShelfIndex++
         if (currentShelfIndex >= shelfPositions.length) return
@@ -430,6 +398,9 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
       }
 
       const shelf = shelfPositions[currentShelfIndex]
+
+      // Calculate the center position for this spine (left edge + half width)
+      const spineCenterX = currentXPosition + (spineWidthPercentage / 2)
 
       // Use EXACT same positioning logic as currently reading books
       let x, y
@@ -441,7 +412,7 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
         const unscaledImageHeight = viewportHeight
 
         // Position relative to the unscaled image dimensions
-        x = imageOffsetX + (unscaledImageWidth * currentXPosition / 100) - (spineWidth / 2)
+        x = imageOffsetX + (unscaledImageWidth * spineCenterX / 100) - (spineWidth / 2)
 
         // For Y position, we need to account for the fact that we're only showing the bottom 75%
         // The original Y position is relative to the full image, but we need to map it to the visible 75%
@@ -451,7 +422,7 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
         y = imageOffsetY + (viewportHeight * adjustedY / 100) - spineHeight // Bottom align to shelf
       } else {
         // Vertical mode: bottom align to shelf
-        x = imageOffsetX + (imageWidth * currentXPosition / 100) - (spineWidth / 2)
+        x = imageOffsetX + (imageWidth * spineCenterX / 100) - (spineWidth / 2)
         y = imageOffsetY + (imageHeight * shelf.y / 100) - spineHeight // Bottom align to shelf
       }
 
@@ -463,21 +434,11 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
         height: spineHeight,
       })
 
-      // Move to next position: add book width, then spacing only if not the last book
-      currentXPosition += spineWidthPercentage
+      // Move to next position: the left edge of the next spine is the right edge of current spine + tiny spacing
+      const tinySpacingPixels = 3 // Small 1px gap between spines
+      const tinySpacingPercentage = (tinySpacingPixels / imageReferenceWidth) * 100
+      currentXPosition += spineWidthPercentage + tinySpacingPercentage
       booksOnCurrentShelf++
-
-      // Add spacing only if there's potentially another book (not at the end of books array)
-      // and we're not at the end of the shelf
-      if (index < bookSpineDimensions.length - 1) {
-        const nextBookData = bookSpineDimensions[index + 1]
-        const nextSpineWidthPercentage = (nextBookData.spineWidth / imageReferenceWidth) * 100
-        const wouldFitOnShelf = (currentXPosition + spacingPercentage + nextSpineWidthPercentage) <= currentShelf.endX
-
-        if (wouldFitOnShelf) {
-          currentXPosition += spacingPercentage
-        }
-      }
     })
 
     return positions
@@ -623,45 +584,94 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
             title={`${book.books?.title || 'Unknown'} by ${book.books?.author || 'Unknown'}`}
             onClick={() => handleBookClick(book)}
           >
-            {/* Book spine with blurred cover image */}
-            <div
-              className="w-full h-full rounded-sm relative overflow-hidden"
-              style={{
-                background: `linear-gradient(rgba(0,0,0,0.2), rgba(0,0,0,0.1))`,
-                filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2))',
-              }}
-            >
-              <Image
-                src={getSmallImageUrl(book.books)}
-                alt={book.books?.title || 'Book spine'}
-                fill
-                className="object-cover rounded-sm"
+            {/* Book spine with 3D effect */}
+            <div className="w-full h-full relative overflow-hidden">
+              {/* Main spine face */}
+              <div
+                className="w-full h-full rounded-sm relative overflow-hidden"
                 style={{
-                  filter: 'blur(1px) brightness(0.8) contrast(1.2)',
-                  opacity: 0.8,
+                  background: `linear-gradient(
+                    to right,
+                    rgba(0,0,0,0.15) 0%,
+                    rgba(0,0,0,0.05) 15%,
+                    rgba(255,255,255,0.2) 50%,
+                    rgba(0,0,0,0.05) 85%,
+                    rgba(0,0,0,0.2) 100%
+                  )`,
+                  boxShadow: `
+                    inset 2px 0 4px rgba(255,255,255,0.3),
+                    inset -2px 0 4px rgba(0,0,0,0.2),
+                    0 2px 6px rgba(0,0,0,0.3),
+                    0 1px 3px rgba(0,0,0,0.2)
+                  `,
+                  border: '1px solid rgba(0,0,0,0.15)',
                 }}
-                sizes="20px"
-              />
+              >
+                <Image
+                  src={getSmallImageUrl(book.books)}
+                  alt={book.books?.title || 'Book spine'}
+                  fill
+                  className="object-cover rounded-sm"
+                  style={{
+                    filter: 'blur(1px) brightness(0.9) contrast(1.1)',
+                    opacity: 0.8,
+                  }}
+                  sizes="20px"
+                />
 
-              {/* Spine text overlay - scales with spine width */}
-              {width > 8 && (
+                {/* Left edge highlight */}
                 <div
-                  className="absolute inset-0 flex items-center justify-center writing-mode-vertical"
-                  style={{ writingMode: 'vertical-lr', textOrientation: 'mixed' }}
-                >
+                  className="absolute left-0 top-0 w-1 h-full"
+                  style={{
+                    background: 'linear-gradient(to bottom, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.3) 50%, rgba(255,255,255,0.2) 100%)',
+                  }}
+                />
+
+                {/* Right edge shadow */}
+                <div
+                  className="absolute right-0 top-0 w-1 h-full"
+                  style={{
+                    background: 'linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.25) 100%)',
+                  }}
+                />
+
+                {/* Top edge highlight */}
+                <div
+                  className="absolute top-0 left-0 w-full h-0.5"
+                  style={{
+                    background: 'linear-gradient(to right, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.5) 50%, rgba(255,255,255,0.4) 100%)',
+                  }}
+                />
+
+                {/* Bottom edge shadow */}
+                <div
+                  className="absolute bottom-0 left-0 w-full h-0.5"
+                  style={{
+                    background: 'linear-gradient(to right, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.3) 50%, rgba(0,0,0,0.25) 100%)',
+                  }}
+                />
+
+                {/* Spine text overlay - scales with spine width */}
+                {width > 8 && (
                   <div
-                    className="text-white font-bold drop-shadow-md truncate text-center max-h-full"
-                    style={{
-                      fontSize: `${Math.max(5, Math.min(containerDimensions.width / containerDimensions.height > 1 ? 12 : 8, (containerDimensions.width / containerDimensions.height > 1 ? 18 : 12) - (width * 0.15)))}px`,
-                      lineHeight: '1.0',
-                      paddingLeft: `${Math.max(0.5, width * 0.02)}px`,
-                      paddingRight: `${Math.max(0.5, width * 0.02)}px`
-                    }}
+                    className="absolute inset-0 flex items-center justify-center writing-mode-vertical"
+                    style={{ writingMode: 'vertical-lr', textOrientation: 'mixed' }}
                   >
-                    {(book.books?.title || '').slice(0, Math.max(1, Math.floor(width * 1.2)))}
+                    <div
+                      className="text-white font-bold drop-shadow-md truncate text-center max-h-full"
+                      style={{
+                        fontFamily: '"Times New Roman", Times, serif',
+                        fontSize: `${Math.max(5, Math.min(containerDimensions.width / containerDimensions.height > 1 ? 12 : 8, (containerDimensions.width / containerDimensions.height > 1 ? 18 : 12) - (width * 0.15)))}px`,
+                        lineHeight: '1.0',
+                        paddingLeft: `${Math.max(0.5, width * 0.02)}px`,
+                        paddingRight: `${Math.max(0.5, width * 0.02)}px`
+                      }}
+                    >
+                      {(book.books?.title || '').slice(0, Math.max(1, Math.floor(width * 1.2)))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
             {/* Hover tooltip */}
@@ -690,27 +700,25 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
 
       </div>
 
-      {/* Book Detail Modal - Notebook Style */}
+      {/* Book Detail Modal - Responsive Notebook Style */}
       {selectedBook && (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-amber-50 rounded-lg shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden border-4 border-amber-200" style={{
-            backgroundImage: `
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4 overflow-y-auto" onClick={closeModal}>
+          <div className={`bg-amber-50 rounded-lg shadow-2xl w-full border-4 border-amber-200 ${
+            viewportWidth > viewportHeight ? 'max-w-5xl max-h-[90vh] overflow-hidden' : 'max-w-lg my-4'
+          }`}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            backgroundImage: viewportWidth > viewportHeight ? `
               linear-gradient(transparent 0px, transparent 19px, #e5e7eb 19px, #e5e7eb 20px, transparent 20px),
               linear-gradient(90deg, transparent 0px, transparent 49px, #dc2626 49px, #dc2626 51px, transparent 51px)
-            `,
-            backgroundSize: '100% 20px, 100% 100%'
+            ` : `linear-gradient(transparent 0px, transparent 19px, #e5e7eb 19px, #e5e7eb 20px, transparent 20px)`,
+            backgroundSize: viewportWidth > viewportHeight ? '100% 20px, 100% 100%' : '100% 20px'
           }}>
-            {bookModalLoading ? (
-              <div className="p-8 text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                <p className="text-gray-600">Loading book details...</p>
-              </div>
-            ) : (
-              <div className="h-full">
+            <div className="h-full">
                 {/* Notebook Header */}
                 <div className="flex justify-between items-center p-4 bg-amber-100 border-b border-amber-300">
                   <div className="flex items-center">
-                    <span className="text-lg font-semibold text-gray-700 font-mono">Reading Journal</span>
+                    <span className={`font-semibold text-gray-700 font-mono ${viewportWidth > viewportHeight ? 'text-lg' : 'text-base'}`}>Reading Journal</span>
                   </div>
                   <button
                     onClick={closeModal}
@@ -721,14 +729,45 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
                   </button>
                 </div>
 
-                {/* Notebook Content */}
-                <div className="flex h-full overflow-hidden">
-                  {/* Left Page - Book Summary */}
-                  <div className="w-1/2 p-8 pl-16 overflow-y-auto" style={{
+                {/* Notebook Content - Responsive Layout */}
+                <div className={`${viewportWidth > viewportHeight ? 'h-full overflow-hidden flex' : 'flex flex-col'}`} style={{
+                  height: viewportWidth > viewportHeight ? 'calc(100% - 65px)' : 'auto'
+                }}>
+                  {/* Book Summary Section */}
+                  <div className={`${viewportWidth > viewportHeight ? 'w-1/2 p-8 pl-16 overflow-y-auto' : 'w-full p-6 px-8'}`} style={{
                     backgroundImage: `linear-gradient(transparent 0px, transparent 19px, #e5e7eb 19px, #e5e7eb 20px, transparent 20px)`,
                     backgroundSize: '100% 20px'
                   }}>
                     <div className="space-y-6">
+                      {/* Reading Dates - Top of first section in vertical mode */}
+                      {viewportWidth <= viewportHeight && (selectedBook.date_started || selectedBook.date_finished) && (
+                        <div className="space-y-2 font-serif text-sm bg-amber-100 p-3 rounded">
+                          <h3 className="font-semibold text-gray-700">Reading Timeline</h3>
+                          <div className="space-y-1">
+                            {selectedBook.date_started && (
+                              <div className="flex items-baseline gap-2">
+                                <span className="text-gray-600 font-semibold">Started:</span>
+                                <span className="text-gray-800">{new Date(selectedBook.date_started).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric'
+                                })}</span>
+                              </div>
+                            )}
+                            {selectedBook.date_finished && (
+                              <div className="flex items-baseline gap-2">
+                                <span className="text-gray-600 font-semibold">Finished:</span>
+                                <span className="text-gray-800">{new Date(selectedBook.date_finished).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric'
+                                })}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Book Cover and Title */}
                       <div className="flex gap-4 mb-6">
                         <div className="flex-shrink-0">
@@ -743,7 +782,7 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
                           </div>
                         </div>
                         <div className="flex-1">
-                          <h2 className="text-xl font-bold text-gray-800 mb-1 font-serif leading-5">
+                          <h2 className={`font-bold text-gray-800 mb-1 font-serif leading-5 ${viewportWidth > viewportHeight ? 'text-xl' : 'text-lg'}`}>
                             {selectedBook.books?.title || 'Unknown Title'}
                           </h2>
                           <p className="text-gray-600 font-serif mb-2">
@@ -791,97 +830,178 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
                         )}
                       </div>
 
-                      {/* Average Rating */}
-                      {selectedBook.books?.average_rating && (
-                        <div className="space-y-2 font-serif text-sm">
-                          <h3 className="font-semibold text-gray-700 underline">Community Rating</h3>
-                          <div className="flex items-center gap-2">
-                            <div className="flex text-yellow-400">
-                              {[...Array(5)].map((_, i) => (
-                                <span key={i} className={i < Math.round(selectedBook.books!.average_rating!) ? 'text-yellow-400' : 'text-gray-300'}>
-                                  ★
-                                </span>
-                              ))}
+                      {/* Ratings Section - Combined in vertical mode */}
+                      {viewportWidth <= viewportHeight ? (
+                        <div className="space-y-3 font-serif text-sm">
+                          <h3 className="font-semibold text-gray-700 underline">Ratings</h3>
+                          <div className="grid grid-cols-2 gap-4">
+                            {/* Community Rating */}
+                            {selectedBook.books?.average_rating && (
+                              <div className="space-y-1">
+                                <h4 className="font-semibold text-gray-600 text-xs">Community</h4>
+                                <div className="flex items-center gap-1">
+                                  <div className="flex text-yellow-400 text-sm">
+                                    {[...Array(5)].map((_, i) => (
+                                      <span key={i} className={i < Math.round(selectedBook.books!.average_rating!) ? 'text-yellow-400' : 'text-gray-300'}>
+                                        ★
+                                      </span>
+                                    ))}
+                                  </div>
+                                  <span className="text-gray-600 text-xs">({selectedBook.books.average_rating.toFixed(1)})</span>
+                                </div>
+                              </div>
+                            )}
+                            {/* My Rating */}
+                            <div className="space-y-1">
+                              <h4 className="font-semibold text-gray-600 text-xs">My Rating</h4>
+                              <div className="flex items-center gap-1">
+                                {selectedBook.rating ? (
+                                  <>
+                                    <div className="flex text-yellow-400 text-sm">
+                                      {[...Array(5)].map((_, i) => (
+                                        <span key={i} className={`${i < selectedBook.rating! ? 'text-yellow-400' : 'text-gray-300'}`}>
+                                          ★
+                                        </span>
+                                      ))}
+                                    </div>
+                                    <span className="text-gray-700 text-xs">({selectedBook.rating})</span>
+                                  </>
+                                ) : (
+                                  <span className="text-gray-500 italic text-xs">Not rated</span>
+                                )}
+                              </div>
                             </div>
-                            <span className="text-gray-600">({selectedBook.books.average_rating.toFixed(2)}/5)</span>
                           </div>
                         </div>
+                      ) : (
+                        /* Original Community Rating for horizontal mode */
+                        selectedBook.books?.average_rating && (
+                          <div className="space-y-2 font-serif text-sm">
+                            <h3 className="font-semibold text-gray-700 underline">Community Rating</h3>
+                            <div className="flex items-center gap-2">
+                              <div className="flex text-yellow-400">
+                                {[...Array(5)].map((_, i) => (
+                                  <span key={i} className={i < Math.round(selectedBook.books!.average_rating!) ? 'text-yellow-400' : 'text-gray-300'}>
+                                    ★
+                                  </span>
+                                ))}
+                              </div>
+                              <span className="text-gray-600">({selectedBook.books.average_rating.toFixed(2)}/5)</span>
+                            </div>
+                          </div>
+                        )
                       )}
 
-                      {/* Description */}
+                      {/* Description - Collapsible in vertical mode */}
                       {selectedBook.books?.description && (
                         <div className="space-y-2 font-serif text-sm">
-                          <h3 className="font-semibold text-gray-700 underline">Synopsis</h3>
-                          <div className="text-gray-700 leading-relaxed max-h-40 overflow-y-auto text-justify">
-                            {selectedBook.books.description}
+                          <div className="flex items-center justify-between">
+                            <h3 className="font-semibold text-gray-700 underline">Synopsis</h3>
+                            {viewportWidth <= viewportHeight && (
+                              <button
+                                onClick={() => setSynopsisExpanded(!synopsisExpanded)}
+                                className="text-blue-600 hover:text-blue-800 text-xs font-medium transition-colors"
+                              >
+                                {synopsisExpanded ? 'Hide' : 'Show More'}
+                              </button>
+                            )}
                           </div>
+                          {viewportWidth <= viewportHeight ? (
+                            <div className={`text-gray-700 leading-relaxed text-justify transition-all duration-300 ${
+                              synopsisExpanded ? 'max-h-none' : 'max-h-20 overflow-hidden'
+                            }`}>
+                              {selectedBook.books.description}
+                              {!synopsisExpanded && selectedBook.books.description.length > 150 && (
+                                <div className="absolute bottom-0 right-0 bg-gradient-to-l from-amber-50 to-transparent pl-8 text-blue-600 text-xs">
+                                  ...
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-gray-700 leading-relaxed max-h-40 overflow-y-auto text-justify">
+                              {selectedBook.books.description}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
                   </div>
 
-                  {/* Center Binding */}
-                  <div className="w-1 bg-gradient-to-b from-amber-300 to-amber-400 shadow-inner"></div>
+                  {/* Center Binding - Only show in horizontal mode */}
+                  {viewportWidth > viewportHeight && (
+                    <div className="w-1 bg-gradient-to-b from-amber-300 to-amber-400 shadow-inner"></div>
+                  )}
 
-                  {/* Right Page - Personal Journal */}
-                  <div className="w-1/2 p-8 pr-16 overflow-y-auto" style={{
-                    backgroundImage: `
+                  {/* Horizontal separator for vertical mode */}
+                  {viewportWidth <= viewportHeight && (
+                    <div className="h-1 bg-gradient-to-r from-amber-300 to-amber-400 shadow-inner mx-6 my-2"></div>
+                  )}
+
+                  {/* Personal Journal Section */}
+                  <div className={`${viewportWidth > viewportHeight ? 'w-1/2 p-8 pr-16 overflow-y-auto' : 'w-full p-6 px-8'}`} style={{
+                    backgroundImage: viewportWidth > viewportHeight ? `
                       linear-gradient(transparent 0px, transparent 19px, #cbd5e1 19px, #cbd5e1 20px, transparent 20px),
                       linear-gradient(90deg, transparent 0px, transparent 29px, #ef4444 29px, #ef4444 30px, transparent 30px)
-                    `,
-                    backgroundSize: '100% 20px, 100% 100%'
+                    ` : `linear-gradient(transparent 0px, transparent 19px, #cbd5e1 19px, #cbd5e1 20px, transparent 20px)`,
+                    backgroundSize: viewportWidth > viewportHeight ? '100% 20px, 100% 100%' : '100% 20px'
                   }}>
-                    <div className="space-y-6 pl-8">
-                      <div className="mb-6">
-                        <h2 className="text-xl font-bold text-gray-800 font-serif mb-2">My Reading Journal</h2>
-                        <div className="w-16 h-0.5 bg-gray-400"></div>
-                      </div>
+                    <div className={`space-y-6 ${viewportWidth > viewportHeight ? 'pl-8' : 'pl-0'}`}>
+                      {viewportWidth > viewportHeight && (
+                        <div className="mb-6">
+                          <h2 className="text-xl font-bold text-gray-800 font-serif mb-2">My Reading Journal</h2>
+                          <div className="w-16 h-0.5 bg-gray-400"></div>
+                        </div>
+                      )}
 
-                      {/* Reading Dates */}
-                      <div className="space-y-3 font-serif text-sm">
-                        {selectedBook.date_started && (
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-gray-600 font-semibold">Started:</span>
-                            <span className="text-gray-800 font-handwriting">{new Date(selectedBook.date_started).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric'
-                            })}</span>
-                          </div>
-                        )}
+                      {/* Reading Dates - Only show in horizontal mode */}
+                      {viewportWidth > viewportHeight && (
+                        <div className="space-y-3 font-serif text-sm">
+                          {selectedBook.date_started && (
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-gray-600 font-semibold">Started:</span>
+                              <span className="text-gray-800 font-handwriting">{new Date(selectedBook.date_started).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
+                              })}</span>
+                            </div>
+                          )}
 
-                        {selectedBook.date_finished && (
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-gray-600 font-semibold">Finished:</span>
-                            <span className="text-gray-800 font-handwriting">{new Date(selectedBook.date_finished).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric'
-                            })}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* My Rating */}
-                      <div className="space-y-2 font-serif text-sm">
-                        <h3 className="font-semibold text-gray-700">My Rating</h3>
-                        <div className="flex items-center gap-2">
-                          {selectedBook.rating ? (
-                            <>
-                              <div className="flex text-yellow-400">
-                                {[...Array(5)].map((_, i) => (
-                                  <span key={i} className={`text-lg ${i < selectedBook.rating! ? 'text-yellow-400' : 'text-gray-300'}`}>
-                                    ★
-                                  </span>
-                                ))}
-                              </div>
-                              <span className="text-gray-700 font-handwriting">({selectedBook.rating}/5)</span>
-                            </>
-                          ) : (
-                            <span className="text-gray-500 italic">Not yet rated</span>
+                          {selectedBook.date_finished && (
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-gray-600 font-semibold">Finished:</span>
+                              <span className="text-gray-800 font-handwriting">{new Date(selectedBook.date_finished).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
+                              })}</span>
+                            </div>
                           )}
                         </div>
-                      </div>
+                      )}
+
+                      {/* My Rating - Only show in horizontal mode */}
+                      {viewportWidth > viewportHeight && (
+                        <div className="space-y-2 font-serif text-sm">
+                          <h3 className="font-semibold text-gray-700">My Rating</h3>
+                          <div className="flex items-center gap-2">
+                            {selectedBook.rating ? (
+                              <>
+                                <div className="flex text-yellow-400">
+                                  {[...Array(5)].map((_, i) => (
+                                    <span key={i} className={`text-lg ${i < selectedBook.rating! ? 'text-yellow-400' : 'text-gray-300'}`}>
+                                      ★
+                                    </span>
+                                  ))}
+                                </div>
+                                <span className="text-gray-700 font-handwriting">({selectedBook.rating}/5)</span>
+                              </>
+                            ) : (
+                              <span className="text-gray-500 italic">Not yet rated</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       {/* My Review */}
                       <div className="space-y-3 font-serif text-sm">
@@ -908,8 +1028,7 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
+            </div>
           </div>
         </div>
       )}

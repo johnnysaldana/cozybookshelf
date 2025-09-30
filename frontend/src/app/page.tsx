@@ -3,8 +3,10 @@
 import { useState } from 'react'
 import axios from 'axios'
 import BookshelfDisplay from '@/components/BookshelfDisplay'
+import { useBookData } from '@/context/BookDataContext'
 
 export default function Home() {
+  const { userData, refreshUserData } = useBookData()
   const [profileUrl, setProfileUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<any>(null)
@@ -57,30 +59,33 @@ export default function Home() {
     setError('')
 
     try {
-      // First get the user's data to find their original profile URL
-      const userResponse = await fetch(`/api/v1/user/${selectedUsername}`)
+      // Use cached userData if available, otherwise fetch it
+      const currentUserData = userData
+      let profileUrlToUse = currentUserData?.user?.profile_url
 
-      if (!userResponse.ok) {
-        throw new Error('User not found')
+      if (!profileUrlToUse) {
+        // Fallback to fetching if not in cache
+        const userResponse = await fetch(`/api/v1/user/${selectedUsername}`)
+        if (!userResponse.ok) {
+          throw new Error('User not found')
+        }
+        const fetchedUserData = await userResponse.json()
+        profileUrlToUse = fetchedUserData.user?.profile_url
       }
 
-      const userData = await userResponse.json()
-
-      if (!userData.user?.profile_url) {
+      if (!profileUrlToUse) {
         throw new Error('No profile URL found for user')
       }
 
       // Rescrape using the original profile URL
       const response = await axios.post('/api/v1/scrape', {
-        profile_url: userData.user.profile_url,
+        profile_url: profileUrlToUse,
         full_scrape: true
       })
 
       if (response.data.success) {
-        // Force a refresh of the bookshelf display by triggering a re-render
-        const currentUsername = selectedUsername
-        setSelectedUsername('')
-        setTimeout(() => setSelectedUsername(currentUsername), 100)
+        // Refresh the cached data
+        await refreshUserData()
       }
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || 'Failed to refresh profile data')
