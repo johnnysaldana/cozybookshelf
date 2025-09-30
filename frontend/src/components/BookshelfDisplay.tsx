@@ -785,9 +785,9 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
 
       {/* Book Detail Modal - Responsive Notebook Style */}
       {selectedBook && (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4 overflow-y-auto" onClick={closeModal}>
-          <div className={`bg-amber-50 rounded-lg shadow-2xl w-full border-4 border-amber-200 ${
-            viewportWidth > viewportHeight ? 'max-w-5xl max-h-[90vh] overflow-hidden' : 'max-w-lg my-4'
+        <div className={`fixed inset-0 z-50 bg-black bg-opacity-50 overflow-y-auto ${viewportWidth > viewportHeight ? 'flex items-center justify-center p-4' : 'flex justify-center pt-[10vh] pb-4'}`} onClick={closeModal}>
+          <div className={`bg-amber-50 rounded-lg shadow-2xl w-full border-4 border-amber-200 relative ${
+            viewportWidth > viewportHeight ? 'max-w-5xl max-h-[90vh] overflow-hidden' : 'max-w-lg h-fit'
           }`}
           onClick={(e) => e.stopPropagation()}
           style={{
@@ -805,7 +805,7 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
                   </div>
                   <button
                     onClick={closeModal}
-                    className="text-gray-600 hover:text-gray-800 text-2xl font-bold leading-none bg-amber-200 hover:bg-amber-300 rounded-full w-8 h-8 flex items-center justify-center transition-colors"
+                    className="text-white hover:text-white text-2xl font-bold leading-none bg-red-400 hover:bg-red-500 rounded-full w-8 h-8 flex items-center justify-center transition-colors shadow-md"
                     aria-label="Close notebook"
                   >
                     ×
@@ -846,6 +846,9 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
                                   day: 'numeric'
                                 })}</span>
                               </div>
+                            )}
+                            {!selectedBook.date_started && !selectedBook.date_finished && (
+                              <div className="text-gray-500 italic text-xs">No dates recorded</div>
                             )}
                           </div>
                         </div>
@@ -1037,7 +1040,7 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
                       )}
 
                       {/* Reading Dates - Only show in horizontal mode */}
-                      {viewportWidth > viewportHeight && (
+                      {viewportWidth > viewportHeight && (selectedBook.date_started || selectedBook.date_finished) && (
                         <div className="space-y-3 font-serif text-sm">
                           {selectedBook.date_started && (
                             <div className="flex items-baseline gap-2">
