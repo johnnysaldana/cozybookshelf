@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import { useBookData } from '@/context/BookDataContext'
+import { useAdmin } from '@/context/AdminContext'
 
 interface Book {
   id: string
@@ -38,6 +39,7 @@ interface BookshelfDisplayProps {
 
 export default function BookshelfDisplay({ username, className = '', fullPage = false }: BookshelfDisplayProps & { fullPage?: boolean }) {
   const { userData, loading: contextLoading, loadUserData } = useBookData()
+  const { isAdmin, toggleAdminControls } = useAdmin()
   const [imageLoaded, setImageLoaded] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerDimensions, setContainerDimensions] = useState({ width: 0, height: 0 })
@@ -294,18 +296,24 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
 
   // Calculate book spine positions on the bookshelf
   const calculateBookSpinePositions = (): Array<{
-    book: Book;
+    book: Book | 'admin';
     x: number;
     y: number;
     width: number;
     height: number;
   }> => {
-    if (!containerDimensions.width || !containerDimensions.height || readBooks.length === 0) {
+    // If admin, need at least container dimensions even if no books
+    if (!containerDimensions.width || !containerDimensions.height) {
+      return []
+    }
+
+    // If not admin and no books, return empty
+    if (!isAdmin && readBooks.length === 0) {
       return []
     }
 
     const positions: Array<{
-      book: Book;
+      book: Book | 'admin';
       x: number;
       y: number;
       width: number;
@@ -369,6 +377,17 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
       book,
       ...calculateSpineDimensions(book.books?.pages, viewportAspectRatio)
     }))
+
+    // If admin, add admin book as first spine
+    if (isAdmin) {
+      const adminSpineWidth = viewportAspectRatio > 1 ? viewportHeight * 0.025 : viewportHeight * 0.025 * 0.7
+      const adminSpineHeight = viewportAspectRatio > 1 ? viewportHeight * 0.12 : viewportHeight * 0.12 * 0.7
+      bookSpineDimensions.unshift({
+        book: 'admin' as any,
+        spineWidth: adminSpineWidth,
+        spineHeight: adminSpineHeight
+      })
+    }
 
     let currentShelfIndex = 0
     let currentXPosition = shelfPositions[0].startX // This tracks the LEFT edge of the next spine
@@ -571,19 +590,82 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
         ))}
 
         {/* Book spines on shelves */}
-        {!loading && spinePositions.map(({ book, x, y, width, height }, index) => (
-          <div
-            key={`spine-${book.id}`}
-            className="absolute cursor-pointer group transition-transform duration-200 hover:scale-110 hover:z-20"
-            style={{
-              left: `${x}px`,
-              top: `${y}px`,
-              width: `${width}px`,
-              height: `${height}px`,
-            }}
-            title={`${book.books?.title || 'Unknown'} by ${book.books?.author || 'Unknown'}`}
-            onClick={() => handleBookClick(book)}
-          >
+        {!loading && spinePositions.map(({ book, x, y, width, height }, index) => {
+          // Handle admin spine
+          if (book === 'admin') {
+            return (
+              <div
+                key="admin-spine"
+                className="absolute cursor-pointer group transition-transform duration-200 hover:scale-110 hover:z-20"
+                style={{
+                  left: `${x}px`,
+                  top: `${y}px`,
+                  width: `${width}px`,
+                  height: `${height}px`,
+                }}
+                title="Click to toggle admin panel"
+                onClick={toggleAdminControls}
+              >
+                {/* Black admin spine */}
+                <div className="w-full h-full relative overflow-hidden">
+                  <div
+                    className="w-full h-full rounded-sm relative overflow-hidden bg-gradient-to-r from-gray-900 via-black to-gray-900"
+                    style={{
+                      boxShadow: `
+                        inset 2px 0 4px rgba(255,255,255,0.1),
+                        inset -2px 0 4px rgba(0,0,0,0.5),
+                        0 2px 6px rgba(0,0,0,0.5),
+                        0 1px 3px rgba(0,0,0,0.3)
+                      `,
+                      border: '1px solid rgba(0,0,0,0.5)',
+                    }}
+                  >
+                    {/* Left edge highlight */}
+                    <div
+                      className="absolute left-0 top-0 w-1 h-full"
+                      style={{
+                        background: 'linear-gradient(to bottom, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 100%)',
+                      }}
+                    />
+
+                    {/* Right edge shadow */}
+                    <div
+                      className="absolute right-0 top-0 w-1 h-full"
+                      style={{
+                        background: 'linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.4) 50%, rgba(0,0,0,0.5) 100%)',
+                      }}
+                    />
+
+                    {/* Admin icon */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <svg
+                        className="w-3/4 h-auto text-gray-600 group-hover:text-gray-500 transition-colors"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.788l1.599.799L9 4.323V3a1 1 0 011-1z" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          }
+
+          // Regular book spine rendering
+          return (
+            <div
+              key={`spine-${book.id}`}
+              className="absolute cursor-pointer group transition-transform duration-200 hover:scale-110 hover:z-20"
+              style={{
+                left: `${x}px`,
+                top: `${y}px`,
+                width: `${width}px`,
+                height: `${height}px`,
+              }}
+              title={`${book.books?.title || 'Unknown'} by ${book.books?.author || 'Unknown'}`}
+              onClick={() => handleBookClick(book)}
+            >
             {/* Book spine with 3D effect */}
             <div className="w-full h-full relative overflow-hidden">
               {/* Main spine face */}
@@ -679,7 +761,8 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
               {book.books?.title || 'Unknown Title'}
             </div>
           </div>
-        ))}
+          )
+        })}
 
         {/* Loading indicator */}
         {loading && imageLoaded && (

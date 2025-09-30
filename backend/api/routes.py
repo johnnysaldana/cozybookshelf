@@ -2,8 +2,9 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from pydantic import BaseModel, HttpUrl
 from typing import Optional, Dict
 from services.scraping_service import scraping_service
-from middleware.auth import verify_api_key
+from middleware.auth import verify_api_key, get_api_keys
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,13 @@ class ScrapeResponse(BaseModel):
     username: Optional[str] = None
     books_count: Optional[int] = None
     error: Optional[str] = None
+
+class AuthValidateRequest(BaseModel):
+    api_key: str
+
+class AuthValidateResponse(BaseModel):
+    is_admin: bool
+    key_type: Optional[str] = None
 
 @router.post("/scrape", response_model=ScrapeResponse)
 async def scrape_goodreads_profile(
@@ -104,6 +112,48 @@ async def get_read_books(
     except Exception as e:
         logger.error(f"Error fetching read books: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/auth/validate", response_model=AuthValidateResponse)
+async def validate_api_key(request: AuthValidateRequest):
+    """
+    Validate an API key and check if it has admin privileges.
+    This endpoint doesn't require authentication itself.
+    """
+    try:
+        api_key = request.api_key
+
+        # Get valid API keys from environment
+        valid_keys = get_api_keys()
+
+        if not valid_keys:
+            raise HTTPException(
+                status_code=500,
+                detail="API keys not configured on server"
+            )
+
+        # Check if the provided key is valid
+        if api_key not in valid_keys:
+            raise HTTPException(
+                status_code=403,
+                detail="Invalid API key"
+            )
+
+        # Determine if this is an admin key
+        personal_key = os.getenv("PERSONAL_API_KEY")
+        is_admin = (api_key == personal_key)
+
+        key_type = "personal" if is_admin else "web_app"
+
+        return AuthValidateResponse(
+            is_admin=is_admin,
+            key_type=key_type
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error validating API key: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/health")
 async def health_check():

@@ -4,10 +4,12 @@ import { useState } from 'react'
 import axios from 'axios'
 import BookshelfDisplay from '@/components/BookshelfDisplay'
 import { useBookData } from '@/context/BookDataContext'
+import { useAdmin } from '@/context/AdminContext'
 import { apiGet, apiPost } from '@/lib/api'
 
 export default function Home() {
   const { userData, refreshUserData } = useBookData()
+  const { showAdminControls } = useAdmin()
   const [profileUrl, setProfileUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<any>(null)
@@ -105,40 +107,44 @@ export default function Home() {
         fullPage={true}
       />
 
-      {/* Top bar with title and import button */}
+      {/* Top bar with title and admin buttons */}
       <div className="fixed top-0 left-0 right-0 z-20 p-4">
         <div className="flex justify-between items-center">
           <div className="text-white flex items-center gap-3">
             <div>
               <h1 className="text-3xl font-bold drop-shadow-lg">WhatIsJohnnyReading.com</h1>
             </div>
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="p-2 bg-white bg-opacity-20 rounded-lg hover:bg-opacity-30 transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Refresh profile data"
-            >
-              <svg
-                className={`w-5 h-5 text-white ${refreshing ? 'animate-spin' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+            {showAdminControls && (
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="p-2 bg-white bg-opacity-20 rounded-lg hover:bg-opacity-30 transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Refresh profile data"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-            </button>
+                <svg
+                  className={`w-5 h-5 text-white ${refreshing ? 'animate-spin' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+              </button>
+            )}
           </div>
-          <button
-            onClick={() => setShowImport(true)}
-            className="px-6 py-2 bg-gradient-to-r from-yellow-400 to-yellow-600 text-white rounded-lg hover:from-yellow-500 hover:to-yellow-700 transition-all shadow-lg"
-          >
-            Import Profile
-          </button>
+          {showAdminControls && (
+            <button
+              onClick={() => setShowImport(true)}
+              className="px-6 py-2 bg-gradient-to-r from-yellow-400 to-yellow-600 text-white rounded-lg hover:from-yellow-500 hover:to-yellow-700 transition-all shadow-lg"
+            >
+              Import Profile
+            </button>
+          )}
         </div>
       </div>
 
