@@ -25,7 +25,7 @@ export default function Home() {
     setResult(null)
 
     try {
-      const response = await axios.post('http://localhost:8000/api/v1/scrape', {
+      const response = await axios.post('/api/v1/scrape', {
         profile_url: profileUrl,
         full_scrape: true
       })
@@ -58,7 +58,7 @@ export default function Home() {
 
     try {
       // First get the user's data to find their original profile URL
-      const userResponse = await fetch(`http://localhost:8000/api/v1/user/${selectedUsername}`)
+      const userResponse = await fetch(`/api/v1/user/${selectedUsername}`)
 
       if (!userResponse.ok) {
         throw new Error('User not found')
@@ -71,7 +71,7 @@ export default function Home() {
       }
 
       // Rescrape using the original profile URL
-      const response = await axios.post('http://localhost:8000/api/v1/scrape', {
+      const response = await axios.post('/api/v1/scrape', {
         profile_url: userData.user.profile_url,
         full_scrape: true
       })
