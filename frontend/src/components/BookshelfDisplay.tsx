@@ -259,8 +259,8 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
     const pages = pageCount || 200; // Default to 200 pages if not specified
 
     // Width calculation based on page count
-    const minMultiplier = 0.012;  // For 100 pages or less
-    const maxMultiplier = 0.045; // For 700 pages or more
+    const minMultiplier = 0.014;  // For 100 pages or less
+    const maxMultiplier = 0.047; // For 700 pages or more
     const minPages = 100;
     const maxPages = 700;
 
@@ -586,6 +586,11 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
                 <p className="text-gray-300 truncate">{book.books?.author || 'Unknown Author'}</p>
               </div>
             </div>
+
+            {/* Hover tooltip */}
+            <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-80 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-30">
+              {book.books?.title || 'Unknown Title'}
+            </div>
           </div>
         ))}
 
@@ -740,16 +745,18 @@ export default function BookshelfDisplay({ username, className = '', fullPage = 
                     style={{ writingMode: 'vertical-lr', textOrientation: 'mixed' }}
                   >
                     <div
-                      className="text-white font-bold drop-shadow-md truncate text-center max-h-full"
+                      className="text-white font-bold truncate text-center max-h-full"
                       style={{
                         fontFamily: '"Times New Roman", Times, serif',
                         fontSize: `${Math.max(5, Math.min(containerDimensions.width / containerDimensions.height > 1 ? 12 : 8, (containerDimensions.width / containerDimensions.height > 1 ? 18 : 12) - (width * 0.15)))}px`,
                         lineHeight: '1.0',
                         paddingLeft: `${Math.max(0.5, width * 0.02)}px`,
-                        paddingRight: `${Math.max(0.5, width * 0.02)}px`
+                        paddingRight: `${Math.max(0.5, width * 0.02)}px`,
+                        textShadow: '0 0 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.8), 1px 1px 2px rgba(0,0,0,1), -1px -1px 2px rgba(0,0,0,1)',
+                        filter: 'brightness(1.2) contrast(1.3)'
                       }}
                     >
-                      {(book.books?.title || '').slice(0, Math.max(1, Math.floor(width * 1.2)))}
+                      {(book.books?.title || '').split(/[-:;(]/)[0].trim().slice(0, Math.max(1, Math.floor(width * 1.2)))}
                     </div>
                   </div>
                 )}
